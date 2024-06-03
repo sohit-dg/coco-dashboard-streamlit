@@ -396,10 +396,13 @@ pool = MySQLConnectionPool(
 
 def fetch_data(query, params=None): 
     query_key = f"{query}:{params}"
-    cached_data = r.get(query_key)
-    if cached_data:
-        print("Returning cached data")
-        return json.loads(cached_data)
+    try:
+        cached_data = r.get(query_key)
+        if cached_data:
+            print("Returning cached data")
+            return json.loads(cached_data)
+    except redis.exceptions.ConnectionError:
+        print("Redis connection failed, proceeding without cache")
     start_time = time.time() 
     connection = pool.get_connection() 
     cursor = connection.cursor()
@@ -408,8 +411,10 @@ def fetch_data(query, params=None):
     cursor.close() 
     connection.close()
     end_time = time.time() 
-
-    r.setex(query_key, 86400, json.dumps(data))  # Cache for 1 hour, adjust as necessary
+    try:
+        r.setex(query_key, 86400, json.dumps(data))  # Cache for 1 hour, adjust as necessary
+    except redis.exceptions.ConnectionError:
+        print("Failed to cache data due to Redis connection error")
     print(f"Query: {query}, Parameters: {params}, Rows Fetched: {len(data)}, Execution Time: {end_time - start_time} seconds")
     return data
 
